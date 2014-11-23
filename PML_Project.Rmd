@@ -1,0 +1,87 @@
+#Predicting Fitness Behavior Using Wearable Technology
+### Practical Machine Learning Course Project
+
+In this exercise, I have built a model to predict patterns in users' exercise behavior using data provided from a Weight Lifting Exercise Dataset.
+
+### Exploratory Data Analysis
+```{r, echo=FALSE}
+setwd("C:/Users/Tony/Coursera/08_pml/Project")
+pml.training <- read.csv("./pml-training.csv")
+pml.testing <- read.csv("./pml-testing.csv")
+
+table(pml.training$classe)
+head(pml.training)
+```
+
+After reading in the data and taking a look, it appears there are a lot of variables with NA values, so I'm going to head ahead and remove these values from both the training and testing data sets. Additionally, I would like to remove any variables with near-zero variance in order to clean up the data and only model using predictors that will be most useful to us.
+
+```{r, echo=FALSE}
+library(caret)
+
+# remove near-zero variance variables
+nzv <- nearZeroVar(pml.training)
+pml.training <- pml.training[, -nzv]
+nzv <- nearZeroVar(pml.testing)
+pml.testing <- pml.testing[, -nzv]
+
+# remove NA variables from training dataset
+columnNACounts <- colSums(is.na(pml.training))      
+badColumns <- columnNACounts >= 19000          
+pml.training <- pml.training[!badColumns]      
+sum(is.na(pml.training))                    
+
+# remove NA variables from testing dataset
+columnNACounts <- colSums(is.na(pml.testing))       
+badColumns <- columnNACounts >= 20            
+pml.testing <- pml.testing[!badColumns]   
+sum(is.na(pml.testing)) 
+```
+
+Next, because the training set is so large, we will split it into a training set and a cross-validation set before applying the model to the testing set.
+
+```{r}
+inTrain <- createDataPartition(y = pml.training$classe, p = 0.4, list = FALSE)
+pml.training2 <- pml.training[inTrain, ]  # 3927 obs. of 56 variables
+pml.cv <- pml.training[-inTrain, ]  # test set for cross validation
+
+modFit <- train(pml.training2$classe ~ ., data = pml.training2, method = "rpart")
+modFit$results
+
+modelFit <- train(classe ~ ., method = "rf", data = pml.training2, trControl = trainControl(method = "cv", number = 4), importance = TRUE)
+modelFit
+```
+
+NOTE: The second model (random forests) has a higher accuracy, but kept giving me errors when trying to apply it to the testing data due to variable classes not matching. After manually changing the class of these variables in each data set, I still could not apply the model, so I am instead using decision trees model which has a higher error rate.
+
+## Cross-Validation
+
+```{r}
+cv <- predict(modFit, pml.cv)
+table(cv==pml.cv$classe)
+confusionMatrix(cv, pml.cv$classe)
+#Out of sample error is about 33%
+```
+
+## Testing Set
+
+```{r}
+pred2 <- predict(modFit, pml.testing)
+pml.testing$classe <- pred2
+
+pml_write_files = function(x) {
+        n = length(x)
+        for (i in 1:n) {
+                filename = paste0("problem_id_", i, ".txt")
+                write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, 
+                            col.names = FALSE)
+        }
+}
+
+
+answers <- pml.testing$classe
+
+pml_write_files(answers)
+answers
+```
+
+Due to the inaccuracy of this model compared to the random forests model I tried, all of the test variables were labeled in the A classe.
